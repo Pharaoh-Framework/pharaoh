@@ -20,7 +20,7 @@ const dtoReflector = DtoReflector();
 abstract interface class _BaseDTOImpl {
   late Map<String, dynamic> data;
 
-  void make(Request request) {
+  void validate(Request request) {
     data = const {};
     final (result, errors) = schema.validateSync(request.body ?? {});
     if (errors.isNotEmpty) {
@@ -29,15 +29,12 @@ abstract interface class _BaseDTOImpl {
     data = Map<String, dynamic>.from(result);
   }
 
-  EzSchema? _schemaCache;
-
-  EzSchema get schema {
-    if (_schemaCache != null) return _schemaCache!;
-
-    final mirror = dtoReflector.reflectType(runtimeType) as r.ClassMirror;
-    final properties = mirror.getters.where((e) => e.isAbstract);
-
-    final entries = properties.map((prop) {
+  r.ClassMirror? _classMirrorCache;
+  Iterable<({String name, Type type, ClassPropertyValidator meta})>
+      get properties {
+    _classMirrorCache ??=
+        dtoReflector.reflectType(runtimeType) as r.ClassMirror;
+    return _classMirrorCache!.getters.where((e) => e.isAbstract).map((prop) {
       final returnType = prop.reflectedReturnType;
       final meta =
           prop.metadata.whereType<ClassPropertyValidator>().firstOrNull ??
@@ -48,11 +45,23 @@ abstract interface class _BaseDTOImpl {
             'Type Mismatch between ${meta.runtimeType}(${meta.propertyType}) & $runtimeType class property ${prop.simpleName}->($returnType)');
       }
 
-      return MapEntry(meta.name ?? prop.simpleName, meta.validator);
+      return (
+        name: (meta.name ?? prop.simpleName),
+        meta: meta,
+        type: returnType,
+      );
     });
+  }
 
-    final entriesToMap = entries.fold<Map<String, EzValidator<dynamic>>>(
-        {}, (prev, curr) => prev..[curr.key] = curr.value);
+  EzSchema? _schemaCache;
+  EzSchema get schema {
+    if (_schemaCache != null) return _schemaCache!;
+
+    final entriesToMap = properties.fold<Map<String, EzValidator<dynamic>>>(
+      {},
+      (prev, curr) => prev..[curr.name] = curr.meta.validator,
+    );
+
     return _schemaCache = EzSchema.shape(entriesToMap);
   }
 }

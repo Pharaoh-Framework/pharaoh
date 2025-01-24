@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:pharaoh/pharaoh.dart';
 import 'package:reflectable/reflectable.dart' as r;
+import 'package:reflectable/src/reflectable_builder_based.dart' as q;
 import 'package:spanner/spanner.dart';
 import 'package:spookie/spookie.dart' as spookie;
 import 'package:collection/collection.dart';
@@ -14,6 +15,7 @@ import 'package:get_it/get_it.dart';
 import 'package:meta/meta.dart';
 
 import 'http.dart';
+import 'openapi.dart';
 import 'router.dart';
 import 'validation.dart';
 
@@ -112,28 +114,28 @@ abstract class ApplicationFactory {
     final spanner = Spanner()..addMiddleware('/', bodyParser);
     Application._instance = _PharaohNextImpl(config, spanner);
 
-    final providerInstances = providers.map(createNewInstance<ServiceProvider>);
+    final providerInstances = providers
+        .map(createNewInstance<ServiceProvider>)
+        .toList(growable: false);
 
     /// register dependencies
-    for (final instance in providerInstances) {
-      await Future.sync(instance.register);
-    }
+    await providerInstances
+        .map((provider) => Future.sync(provider.register))
+        .wait;
 
     if (globalMiddleware != null) {
       spanner.addMiddleware<Middleware>('/', globalMiddleware!);
     }
 
     /// boot providers
-    for (final provider in providerInstances) {
-      await Future.sync(provider.boot);
-    }
+    await providerInstances.map((provider) => Future.sync(provider.boot)).wait;
   }
 
   static RequestHandler buildControllerMethod(ControllerMethod method) {
     final params = method.params;
+    final methodName = method.methodName;
 
-    return (req, res) {
-      final methodName = method.methodName;
+    return (req, res) async {
       final instance = createNewInstance<HTTPController>(method.controller);
       final mirror = inject.reflect(instance);
 
@@ -141,7 +143,7 @@ abstract class ApplicationFactory {
         ..invokeSetter('request', req)
         ..invokeSetter('response', res);
 
-      late Function() methodCall;
+      Function methodCall;
 
       if (params.isNotEmpty) {
         final args = _resolveControllerMethodArgs(req, method);
@@ -150,7 +152,12 @@ abstract class ApplicationFactory {
         methodCall = () => mirror.invoke(methodName, []);
       }
 
-      return Future.sync(methodCall);
+      try {
+        final result = await methodCall.call();
+        return result is Response ? result : res.json(result);
+      } on Response catch (response) {
+        return response;
+      }
     };
   }
 

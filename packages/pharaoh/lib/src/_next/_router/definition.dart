@@ -23,13 +23,25 @@ class RouteMapping {
   }
 }
 
+typedef OpenApiRoute = ({
+  List<String> tags,
+  Type? returnType,
+  HTTPMethod method,
+  String route,
+  List<ControllerMethodParam> args,
+});
+
 abstract class RouteDefinition {
   late RouteMapping route;
   final RouteDefinitionType type;
 
+  String? group;
+
   RouteDefinition(this.type);
 
   void commit(Spanner spanner);
+
+  List<OpenApiRoute> get openAPIRoutes;
 
   RouteDefinition _prefix(String prefix) => this..route = route.prefix(prefix);
 }
@@ -53,7 +65,8 @@ class UseAliasedMiddleware {
 
   RouteGroupDefinition routes(List<RouteDefinition> routes) {
     return RouteGroupDefinition._(
-      BASE_PATH,
+      alias,
+      prefix: BASE_PATH,
       definitions: routes,
     )..middleware(mdw);
   }
@@ -69,11 +82,15 @@ class _MiddlewareDefinition extends RouteDefinition {
 
   @override
   void commit(Spanner spanner) => spanner.addMiddleware(route.path, mdw);
+
+  @override
+  List<OpenApiRoute> get openAPIRoutes => const [];
 }
 
 typedef ControllerMethodDefinition = (Type controller, Symbol symbol);
 
 class ControllerMethod {
+  final Type? returnType;
   final ControllerMethodDefinition method;
   final Iterable<ControllerMethodParam> params;
 
@@ -81,7 +98,11 @@ class ControllerMethod {
 
   Type get controller => method.$1;
 
-  ControllerMethod(this.method, [this.params = const []]);
+  ControllerMethod(
+    this.method, {
+    this.params = const [],
+    this.returnType,
+  });
 }
 
 class ControllerMethodParam {
@@ -121,6 +142,17 @@ class ControllerRouteMethodDefinition extends RouteDefinition {
       spanner.addRoute(routeMethod, route.path, useRequestHandler(handler));
     }
   }
+
+  @override
+  List<OpenApiRoute> get openAPIRoutes => route.methods
+      .map((e) => (
+            route: route.path,
+            method: e,
+            args: method.params.toList(),
+            returnType: method.returnType,
+            tags: <String>[if (group != null) group!]
+          ))
+      .toList();
 }
 
 class RouteGroupDefinition extends RouteDefinition {
@@ -146,12 +178,12 @@ class RouteGroupDefinition extends RouteDefinition {
   void _unwrapRoutes(Iterable<RouteDefinition> routes) {
     for (final subRoute in routes) {
       if (subRoute is! RouteGroupDefinition) {
-        defns.add(subRoute._prefix(route.path));
+        defns.add(subRoute._prefix(route.path)..group = name);
         continue;
       }
 
       for (var e in subRoute.defns) {
-        defns.add(e._prefix(route.path));
+        defns.add(e._prefix(route.path)..group = subRoute.name);
       }
     }
   }
@@ -169,6 +201,12 @@ class RouteGroupDefinition extends RouteDefinition {
       mdw.commit(spanner);
     }
   }
+
+  @override
+  List<OpenApiRoute> get openAPIRoutes => defns.fold(
+        [],
+        (preV, c) => preV..addAll(c.openAPIRoutes),
+      );
 }
 
 typedef RequestHandlerWithApp = Function(
@@ -208,4 +246,15 @@ class FunctionalRouteDefinition extends RouteDefinition {
       spanner.addRoute<Middleware>(method, path, _requestHandler!);
     }
   }
+
+  @override
+  List<OpenApiRoute> get openAPIRoutes => [
+        (
+          args: [],
+          returnType: Response,
+          method: method,
+          route: route.path,
+          tags: <String>[if (group != null) group!]
+        )
+      ];
 }

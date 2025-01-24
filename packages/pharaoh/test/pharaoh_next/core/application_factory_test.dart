@@ -35,7 +35,7 @@ void main() {
         test('for method with args', () async {
           final showMethod = ControllerMethod(
             (TestHttpController, #show),
-            [ControllerMethodParam('userId', int, meta: query)],
+            params: [ControllerMethodParam('userId', int, meta: query)],
           );
 
           final handler = ApplicationFactory.buildControllerMethod(showMethod);

@@ -20,6 +20,30 @@ class _PharaohNextImpl implements Application {
   void useRoutes(RoutesResolver routeResolver) {
     final routes = routeResolver.call();
     routes.forEach((route) => route.commit(_spanner));
+
+    final openAPiRoutes = routes.fold(
+        <OpenApiRoute>[], (preV, curr) => preV..addAll(curr.openAPIRoutes));
+
+    final result = OpenApiGenerator.generateOpenApi(
+      openAPiRoutes,
+      apiName: _appConfig.name,
+      serverUrls: [_appConfig.url],
+    );
+
+    final openApiFile = File('openapi.json');
+    openApiFile.writeAsStringSync(JsonEncoder.withIndent(' ').convert(result));
+
+    Route.route(HTTPMethod.GET, '/swagger', (req, res) {
+      return res
+          .header(HttpHeaders.contentTypeHeader, ContentType.html.value)
+          .send(OpenApiGenerator.renderDocsPage('/swagger.json'));
+    }).commit(_spanner);
+
+    Route.route(HTTPMethod.GET, '/swagger.json', (_, res) {
+      return res
+          .header(HttpHeaders.contentTypeHeader, ContentType.json.value)
+          .send(openApiFile.openRead());
+    }).commit(_spanner);
   }
 
   @override

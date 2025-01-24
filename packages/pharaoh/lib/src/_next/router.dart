@@ -73,9 +73,13 @@ abstract interface class Route {
     return ControllerRouteMethodDefinition(defn, mapping);
   }
 
-  static RouteGroupDefinition group(String name, List<RouteDefinition> routes,
-          {String? prefix}) =>
-      RouteGroupDefinition._(name, definitions: routes, prefix: prefix);
+  static RouteGroupDefinition group(
+    String name,
+    List<RouteDefinition> routes, {
+    String? prefix,
+  }) {
+    return RouteGroupDefinition._(name, definitions: routes, prefix: prefix);
+  }
 
   static RouteGroupDefinition resource(String resource, Type controller,
       {String? parameterName}) {
@@ -103,6 +107,9 @@ abstract interface class Route {
       Route.route(method, '/*', handler);
 }
 
-Middleware useAliasedMiddleware(String alias) =>
-    ApplicationFactory.resolveMiddlewareForGroup(alias)
-        .reduce((val, e) => val.chain(e));
+@inject
+abstract mixin class ApiResource {
+  const ApiResource();
+
+  Map<String, dynamic> toJson();
+}

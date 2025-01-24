@@ -1,6 +1,6 @@
 part of '../router.dart';
 
-abstract class RequestAnnotation<T> {
+sealed class RequestAnnotation<T> {
   final String? name;
 
   const RequestAnnotation([this.name]);
@@ -61,7 +61,7 @@ class Body extends RequestAnnotation {
     }
 
     final dtoInstance = methodParam.dto;
-    if (dtoInstance != null) return dtoInstance..make(request);
+    if (dtoInstance != null) return dtoInstance..validate(request);
 
     final type = methodParam.type;
     if (type != dynamic && body.runtimeType != type) {

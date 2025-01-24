@@ -114,7 +114,7 @@ void main() {
 
       final app = pharaoh
         ..post('/', (req, res) {
-          dto.make(req);
+          dto.validate(req);
           return res.json({
             'firstname': dto.username,
             'lastname': dto.lastname,
@@ -147,7 +147,7 @@ void main() {
 
       final app = pharaoh
         ..post('/optional', (req, res) {
-          dto.make(req);
+          dto.validate(req);
 
           return res.json({
             'nationality': dto.nationality,
@@ -197,7 +197,7 @@ void main() {
       final dto = DTOTypeMismatch();
 
       pharaoh.post('/type-mismatch', (req, res) {
-        dto.make(req);
+        dto.validate(req);
         return res.ok('Foo Bar');
       });
 

@@ -99,11 +99,14 @@ ControllerMethod parseControllerMethod(ControllerMethodDefinition defn) {
       methods.firstWhereOrNull((e) => e.simpleName == symbolToString(method));
   if (actualMethod == null) {
     throw ArgumentError(
-        '$type does not have method  #${symbolToString(method)}');
+      '$type does not have method  #${symbolToString(method)}',
+    );
   }
 
+  final returnType = getActualType(actualMethod.reflectedReturnType);
+
   final parameters = actualMethod.parameters;
-  if (parameters.isEmpty) return ControllerMethod(defn);
+  if (parameters.isEmpty) return ControllerMethod(defn, returnType: returnType);
 
   if (parameters.any((e) => e.metadata.length > 1)) {
     throw ArgumentError(
@@ -131,7 +134,17 @@ ControllerMethod parseControllerMethod(ControllerMethodDefinition defn) {
     );
   });
 
-  return ControllerMethod(defn, params);
+  return ControllerMethod(defn, params: params, returnType: returnType);
+}
+
+final _regex = RegExp(r"^(\w+)<(.+)>$");
+Type? getActualType(Type type) {
+  final match = _regex.firstMatch(type.toString());
+  if (match != null) {
+    return q.data[inject]!.types
+        .firstWhereOrNull((type) => type.toString() == match.group(2));
+  }
+  return type;
 }
 
 BaseDTO? _tryResolveDtoInstance(Type type) {
